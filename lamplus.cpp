@@ -119,7 +119,7 @@ int main() {
                     logFile.close();
                 }
                 else {
-                    std::cerr << "Unable to open log file\n";  //好像屁用么得 但我也不敢删 不知道会不会报错
+                    std::cerr << "Unable to open log file\n"; 
                 }
             }
             else if (!isRunning && wasRunning) {
@@ -132,7 +132,7 @@ int main() {
                     logFile.close();
                 }
                 else {
-                    std::cerr << "Unable to open log file\n";   //好像屁用么得 但我也不敢删 不知道会不会报错
+                    std::cerr << "Unable to open log file\n";  
                 }
             }
         }
