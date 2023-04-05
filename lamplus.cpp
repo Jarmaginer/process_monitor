@@ -1,4 +1,4 @@
-﻿#include <Windows.h>
+#include <Windows.h>
 #include <tlhelp32.h>
 #include <iostream>
 #include <chrono>
@@ -7,141 +7,164 @@
 #include <fstream> // 添加头文件
 #include <Mmdeviceapi.h>
 #include <endpointvolume.h>
-
+// 添加头文件
+#include <WinUser.h>
 #pragma comment(lib, "Winmm.lib")
 #pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
 
 // 声明监测的进程名称和声音文件名称
-const wchar_t* PROCESS_NAME = L"rtcRemoteDesktop.exe";
+const wchar_t* PROCESS_NAME = L"Taskmgr.exe";
 const wchar_t* SOUND_FILE_START = L"start.wav";
 const wchar_t* SOUND_FILE_END = L"end.wav";
 
-// 第一个时间段的开始和结束时间
-const int START_HOUR_1 = 6;
-const int START_MINUTE_1 = 30;
-const int END_HOUR_1 = 7;
-const int END_MINUTE_1 = 25;
+// 声明监测时间段
+const int START_HOUR = 14;
+const int START_MINUTE = 0;
+const int END_HOUR = 22;
+const int END_MINUTE = 0;
 
-// 第二个时间段的开始和结束时间
-const int START_HOUR_2 = 17;
-const int START_MINUTE_2 = 0;
-const int END_HOUR_2 = 22;
-const int END_MINUTE_2 = 0;
+void setVolume(float volume) {
+    HRESULT hr = S_OK;
+    CoInitialize(NULL);
+
+    IMMDeviceEnumerator* pEnumerator = NULL;
+    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
+
+    IMMDevice* pDevice = NULL;
+    hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &pDevice);
+
+    IAudioEndpointVolume* pAudioEndpointVolume = NULL;
+    hr = pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pAudioEndpointVolume);
+
+    hr = pAudioEndpointVolume->SetMasterVolumeLevelScalar(volume, NULL);
+
+    pAudioEndpointVolume->Release();
+    pDevice->Release();
+    pEnumerator->Release();
+    CoUninitialize();
+}//改变系统音量
 
 bool isMonitoringTime() {
     SYSTEMTIME currentTime;
     GetLocalTime(&currentTime);
     int currentHour = currentTime.wHour;
     int currentMinute = currentTime.wMinute;
-    if ((currentHour > START_HOUR_1 || (currentHour == START_HOUR_1 && currentMinute >= START_MINUTE_1))
-        && (currentHour < END_HOUR_1 || (currentHour == END_HOUR_1 && currentMinute < END_MINUTE_1))) {
-        return true;
-    }
-    if ((currentHour > START_HOUR_2 || (currentHour == START_HOUR_2 && currentMinute >= START_MINUTE_2))
-        && (currentHour < END_HOUR_2 || (currentHour == END_HOUR_2 && currentMinute < END_MINUTE_2))) {
+    if ((currentHour > START_HOUR || (currentHour == START_HOUR && currentMinute >= START_MINUTE))
+        && (currentHour < END_HOUR || (currentHour == END_HOUR && currentMinute < END_MINUTE))) {
         return true;
     }
     return false;
 }
 
-int main() {
+void playSound(const wchar_t* soundFile) {
+    setVolume(0.3f);
+    //播放声音文件
+    PlaySound(soundFile, NULL, SND_FILENAME | SND_ASYNC);
+}
+
+//将日志信息写入文件
+void logToFile(const std::string& message) {
+    std::ofstream logFile("install.txt", std::ios_base::app);
+    if (!logFile.is_open()) {
+        // 文件不存在，则创建一个新文件
+        logFile.open("install.txt", std::ios_base::out);
+    }
+    logFile << message << std::endl;
+    logFile.close();
+}
+
+//判断进程是否正在运行
+bool isProcessRunning(const wchar_t* processName) {
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnapshot != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32 entry;
+        entry.dwSize = sizeof(PROCESSENTRY32);
+        if (Process32First(hSnapshot, &entry)) {
+            do {
+                if (wcscmp(entry.szExeFile, processName) == 0) {
+                    CloseHandle(hSnapshot);
+                    return true;
+                }
+            } while (Process32Next(hSnapshot, &entry));
+        }
+        CloseHandle(hSnapshot);
+    }
+    return false;
+}
+
+//监测进程
 
 
 
-    // 进入监测循环
+// 判断是否有鼠标点击或移动事件
+bool isMouseActive() {
+    LASTINPUTINFO lastInputInfo;
+    lastInputInfo.cbSize = sizeof(LASTINPUTINFO);
+    if (GetLastInputInfo(&lastInputInfo)) {
+        DWORD lastInputTime = lastInputInfo.dwTime;
+        DWORD currentTime = GetTickCount();
+        if (currentTime - lastInputTime < 30) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// 在监测进程时加入判断是否有鼠标点击或移动事件
+void monitorProcess(const wchar_t* processName, const wchar_t* startSoundFile, const wchar_t* endSoundFile) {
     bool wasRunning = false;
     while (true) {
-        // 检查是否在监测时间段内
         bool isMonitoring = isMonitoringTime();
+        bool isRunning = isProcessRunning(processName);
+        bool isMouseactive = isMouseActive(); // 添加判断是否有鼠标点击或移动事件
 
-        // 检查进程是否在运行，并根据进程是否在运行播放声音和隐藏窗口
-        bool isRunning = false;
-        HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-        if (hSnapshot != INVALID_HANDLE_VALUE) {
-            PROCESSENTRY32 entry;
-            entry.dwSize = sizeof(PROCESSENTRY32);
-            if (Process32First(hSnapshot, &entry)) {
-                do {
-                    if (wcscmp(entry.szExeFile, PROCESS_NAME) == 0) {
-                        isRunning = true;
-                        break;
-                    }
-                } while (Process32Next(hSnapshot, &entry));
-            }
-            CloseHandle(hSnapshot);
-        }
-
-        if (isMonitoring) {
-
-            HRESULT hr = S_OK;
-            CoInitialize(NULL);
-
-            IMMDeviceEnumerator* pEnumerator = NULL;
-            hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
-
-            IMMDevice* pDevice = NULL;
-            hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &pDevice);
-
-            IAudioEndpointVolume* pAudioEndpointVolume = NULL;
-            hr = pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pAudioEndpointVolume);
-
-            float volume = 0.3f; // 设置音量为 30%
-            hr = pAudioEndpointVolume->SetMasterVolumeLevelScalar(volume, NULL);
-
-            pAudioEndpointVolume->Release();
-            pDevice->Release();
-            pEnumerator->Release();
-            CoUninitialize();
-
-            //调节系统音量
-
-
-
-
-
-
-
+        if (isMonitoring && !isMouseactive) { // 添加判断是否有鼠标点击或移动事件
             SYSTEMTIME currentTime;
             GetLocalTime(&currentTime);
-            int currentday = currentTime.wDay;
             int currentHour = currentTime.wHour;
             int currentMinute = currentTime.wMinute;
 
-            //定义时间
 
             if (isRunning && !wasRunning) {
-                PlaySound(SOUND_FILE_START, NULL, SND_FILENAME | SND_ASYNC);
+                playSound(startSoundFile);
                 std::cout << "start:\n";
-                // 添加输出日志到文件的代码
-                std::ofstream logFile("install.txt", std::ios_base::app);
-                if (logFile.is_open()) {
-                    logFile << "start: " << currentday << "日： " << currentHour << "： " << currentMinute << '\n';
-                    logFile.close();
-                }
-                else {
-                    std::cerr << "Unable to open log file\n"; 
-                }
+                std::string logMessage = std::to_string(currentHour) + ":" + std::to_string(currentMinute) + ":  Process started on " + std::to_string(currentTime.wDay) + "/" + std::to_string(currentTime.wMonth) + "/" + std::to_string(currentTime.wYear);
+                logToFile(logMessage);
             }
             else if (!isRunning && wasRunning) {
-                PlaySound(SOUND_FILE_END, NULL, SND_FILENAME | SND_ASYNC);
+                playSound(endSoundFile);
                 std::cout << "end:\n";
-                // 添加输出日志到文件的代码
-                std::ofstream logFile("install.txt", std::ios_base::app);
-                if (logFile.is_open()) {
-                    logFile << "end: " << currentday << "日： " << currentHour << "： " << currentMinute << '\n';
-                    logFile.close();
-                }
-                else {
-                    std::cerr << "Unable to open log file\n";  
-                }
+                std::string logMessage = std::to_string(currentHour) + ":" + std::to_string(currentMinute) + ":  Process ended on " + std::to_string(currentTime.wDay) + "/" + std::to_string(currentTime.wMonth) + "/" + std::to_string(currentTime.wYear);
             }
         }
 
-
-        // 更新 wasRunning 变量并等待一段时间再次检查
         wasRunning = isRunning;
-        Sleep(500);
+        Sleep(1000);
     }
+}
+int main() {
+    HANDLE hMutex = CreateMutex(NULL, TRUE, L"Global\\MyApplicationMutex");
+    if (hMutex == NULL) {
+        // 处理错误
+        return 1;
+    }
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        // 程序已经在运行
+        MessageBox(NULL, L"The program is already running.", L"Error", MB_OK | MB_ICONERROR);
+        CloseHandle(hMutex);
+        return 0;
+    }
+
+    // 加锁互斥量
+    WaitForSingleObject(hMutex, INFINITE);
+
+    // 监测进程
+    monitorProcess(PROCESS_NAME, SOUND_FILE_START, SOUND_FILE_END);
+
+    // 释放互斥量并关闭句柄
+    ReleaseMutex(hMutex);
+    CloseHandle(hMutex);
 
     return 0;
 }
+
