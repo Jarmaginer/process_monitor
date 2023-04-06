@@ -4,7 +4,7 @@
 #include <chrono>
 #include <ctime>
 #include <iomanip>
-#include <fstream> // 添加头文件
+#include <fstream> 
 #include <Mmdeviceapi.h>
 #include <endpointvolume.h>
 // 添加头文件
@@ -13,12 +13,12 @@
 #pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
 
 // 声明监测的进程名称和声音文件名称
-const wchar_t* PROCESS_NAME = L"Taskmgr.exe";
+const wchar_t* PROCESS_NAME = L"rtcRemoteDesktop.exe";
 const wchar_t* SOUND_FILE_START = L"start.wav";
 const wchar_t* SOUND_FILE_END = L"end.wav";
 
 // 声明监测时间段
-const int START_HOUR = 14;
+const int START_HOUR = 17;
 const int START_MINUTE = 0;
 const int END_HOUR = 22;
 const int END_MINUTE = 0;
@@ -103,7 +103,7 @@ bool isMouseActive() {
     if (GetLastInputInfo(&lastInputInfo)) {
         DWORD lastInputTime = lastInputInfo.dwTime;
         DWORD currentTime = GetTickCount();
-        if (currentTime - lastInputTime < 30) {
+        if (currentTime - lastInputTime < 300000) {
             return true;
         }
     }
@@ -118,7 +118,7 @@ void monitorProcess(const wchar_t* processName, const wchar_t* startSoundFile, c
         bool isRunning = isProcessRunning(processName);
         bool isMouseactive = isMouseActive(); // 添加判断是否有鼠标点击或移动事件
 
-        if (isMonitoring && !isMouseactive) { // 添加判断是否有鼠标点击或移动事件
+        if (isMonitoring && !isMouseactive) { 
             SYSTEMTIME currentTime;
             GetLocalTime(&currentTime);
             int currentHour = currentTime.wHour;
@@ -142,6 +142,8 @@ void monitorProcess(const wchar_t* processName, const wchar_t* startSoundFile, c
         Sleep(1000);
     }
 }
+
+
 int main() {
     HANDLE hMutex = CreateMutex(NULL, TRUE, L"Global\\MyApplicationMutex");
     if (hMutex == NULL) {
@@ -154,17 +156,13 @@ int main() {
         CloseHandle(hMutex);
         return 0;
     }
-
     // 加锁互斥量
     WaitForSingleObject(hMutex, INFINITE);
-
     // 监测进程
     monitorProcess(PROCESS_NAME, SOUND_FILE_START, SOUND_FILE_END);
-
     // 释放互斥量并关闭句柄
     ReleaseMutex(hMutex);
     CloseHandle(hMutex);
-
     return 0;
 }
 
