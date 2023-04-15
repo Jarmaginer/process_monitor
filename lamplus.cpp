@@ -5,6 +5,7 @@
 #include <ctime>
 #include <iomanip>
 #include <fstream> 
+#include <WinInet.h> // 添加头文件
 #include <Mmdeviceapi.h>
 #include <endpointvolume.h>
 // 添加头文件
@@ -22,6 +23,51 @@ const int START_HOUR = 17;
 const int START_MINUTE = 0;
 const int END_HOUR = 22;
 const int END_MINUTE = 0;
+
+
+
+
+void logToCloud(const std::string& message) {
+    std::string url = "log.kids0.ml"; // 替换为你的服务器URL
+    HINTERNET hInternet = InternetOpenA("MyApp", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+    if (hInternet == NULL) {
+        return;
+    }
+    HINTERNET hConnection = InternetConnectA(hInternet, url.c_str(), INTERNET_DEFAULT_HTTP_PORT, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 1);
+    if (hConnection == NULL) {
+        InternetCloseHandle(hInternet);
+        return;
+    }
+    HINTERNET hRequest = HttpOpenRequestA(hConnection, "POST", "", NULL, NULL, NULL, INTERNET_FLAG_RELOAD, 1);
+    if (hRequest == NULL) {
+        InternetCloseHandle(hConnection);
+        InternetCloseHandle(hInternet);
+        return;
+    }
+    const char* headers = "Content-Type: application/x-www-form-urlencoded";
+    std::string postdata = "message=" + message;
+    BOOL sent = HttpSendRequestA(hRequest, headers, strlen(headers), (LPVOID)postdata.c_str(), postdata.length());
+    if (!sent) {
+        InternetCloseHandle(hRequest);
+        InternetCloseHandle(hConnection);
+        InternetCloseHandle(hInternet);
+        return;
+    }
+    char buffer[1024] = { 0 };
+    DWORD bytesRead = 0;
+    while (InternetReadFile(hRequest, buffer, sizeof(buffer) - 1, &bytesRead) && bytesRead > 0) {
+        buffer[bytesRead] = '\0';
+        // 处理服务器响应
+    }
+    InternetCloseHandle(hRequest);
+    InternetCloseHandle(hConnection);
+    InternetCloseHandle(hInternet);
+}
+//将日志信息上传到云端php服务器
+
+
+
+
 
 void setVolume(float volume) {
     HRESULT hr = S_OK;
@@ -64,6 +110,7 @@ void playSound(const wchar_t* soundFile) {
 
 //将日志信息写入文件
 void logToFile(const std::string& message) {
+    logToCloud(message);
     std::ofstream logFile("install.txt", std::ios_base::app);
     if (!logFile.is_open()) {
         // 文件不存在，则创建一个新文件
@@ -71,6 +118,7 @@ void logToFile(const std::string& message) {
     }
     logFile << message << std::endl;
     logFile.close();
+
 }
 
 //判断进程是否正在运行
@@ -118,7 +166,7 @@ void monitorProcess(const wchar_t* processName, const wchar_t* startSoundFile, c
         bool isRunning = isProcessRunning(processName);
         bool isMouseactive = isMouseActive(); // 添加判断是否有鼠标点击或移动事件
 
-        if (isMonitoring && !isMouseactive) { 
+        if (isMonitoring && !isMouseactive) {
             SYSTEMTIME currentTime;
             GetLocalTime(&currentTime);
             int currentHour = currentTime.wHour;
@@ -130,17 +178,19 @@ void monitorProcess(const wchar_t* processName, const wchar_t* startSoundFile, c
                 std::cout << "start:\n";
                 std::string logMessage = std::to_string(currentHour) + ":" + std::to_string(currentMinute) + ":  Process started on " + std::to_string(currentTime.wDay) + "/" + std::to_string(currentTime.wMonth) + "/" + std::to_string(currentTime.wYear);
                 logToFile(logMessage);
+
             }
             else if (!isRunning && wasRunning) {
                 playSound(endSoundFile);
                 std::cout << "end:\n";
                 std::string logMessage = std::to_string(currentHour) + ":" + std::to_string(currentMinute) + ":  Process ended on " + std::to_string(currentTime.wDay) + "/" + std::to_string(currentTime.wMonth) + "/" + std::to_string(currentTime.wYear);
                 logToFile(logMessage);
+
             }
         }
 
         wasRunning = isRunning;
-        Sleep(1000);
+        Sleep(500);
     }
 }
 
@@ -159,6 +209,19 @@ int main() {
     }
     // 加锁互斥量
     WaitForSingleObject(hMutex, INFINITE);
+
+
+    SYSTEMTIME currentTime;
+    GetLocalTime(&currentTime);
+    int currentHour = currentTime.wHour;
+    int currentMinute = currentTime.wMinute;
+    std::string logMessage = std::to_string(currentHour) + ":" + std::to_string(currentMinute) + ":  FuckSeewo On " + std::to_string(currentTime.wDay) + "/" + std::to_string(currentTime.wMonth) + "/" + std::to_string(currentTime.wYear);
+    logToCloud(logMessage);
+    //启动时向云端发送日志
+
+
+
+
     // 监测进程
     monitorProcess(PROCESS_NAME, SOUND_FILE_START, SOUND_FILE_END);
     // 释放互斥量并关闭句柄
