@@ -28,7 +28,7 @@ const int END_MINUTE = 0;
 
 
 void logToCloud(const std::string& message) {
-    std::string url = "log.kids0.ml"; // 替换为你的服务器URL
+    std::string url = "log.kids0.ml"; // 服务器URL
     HINTERNET hInternet = InternetOpenA("MyApp", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
     if (hInternet == NULL) {
         return;
