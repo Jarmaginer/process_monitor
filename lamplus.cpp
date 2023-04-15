@@ -135,6 +135,7 @@ void monitorProcess(const wchar_t* processName, const wchar_t* startSoundFile, c
                 playSound(endSoundFile);
                 std::cout << "end:\n";
                 std::string logMessage = std::to_string(currentHour) + ":" + std::to_string(currentMinute) + ":  Process ended on " + std::to_string(currentTime.wDay) + "/" + std::to_string(currentTime.wMonth) + "/" + std::to_string(currentTime.wYear);
+                logToFile(logMessage);
             }
         }
 
